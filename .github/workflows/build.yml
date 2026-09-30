@@ -1,0 +1,46 @@
+name: Build APK from zip
+on:
+  push:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zip extract karo
+        id: unzip
+        run: |
+          ZIP=$(ls -t *.zip 2>/dev/null | head -n 1)
+          if [ -z "$ZIP" ]; then
+            echo "Repo ke root mein koi .zip nahi mili"
+            exit 1
+          fi
+          echo "Using: $ZIP"
+          mkdir -p build_src
+          unzip -o "$ZIP" -d build_src
+          SETTINGS=$(find build_src -maxdepth 3 -name 'settings.gradle*' | head -n 1)
+          if [ -z "$SETTINGS" ]; then
+            echo "Zip ke andar settings.gradle nahi mila"
+            exit 1
+          fi
+          echo "proj=$(dirname "$SETTINGS")" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.9
+
+      - name: Build debug APK
+        working-directory: ${{ steps.unzip.outputs.proj }}
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PhoneAgent-debug
+          path: ${{ steps.unzip.outputs.proj }}/app/build/outputs/apk/debug/*.apk
